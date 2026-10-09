@@ -208,3 +208,814 @@ Wait for consent; never auto-create ADRs. Group related decisions (stacks, authe
 
 ## Code Standards
 See `.specify/memory/constitution.md` for code quality, testing, performance, security, and architecture principles.
+
+# GrowMetrics — OpenCode Project Instructions
+
+## 1. Project Context
+
+You are working on GrowMetrics, a multi-tenant Business Intelligence and Decision Intelligence SaaS application.
+
+Primary stack:
+
+* Next.js
+* React
+* TypeScript
+* Tailwind CSS
+* shadcn/ui
+* Node.js
+* Express
+* PostgreSQL
+* Prisma
+* Redis / Upstash
+* OpenAI Agents SDK
+* Groq
+* Nodemailer
+* Cloudflare R2
+
+Read `constitution.md` before making architectural or security-sensitive changes.
+
+The constitution contains the non-negotiable project rules.
+
+---
+
+# 2. General Development Behavior
+
+Before implementing a feature:
+
+1. Understand the relevant specification.
+2. Inspect the existing code.
+3. Identify existing patterns.
+4. Reuse existing utilities/components/services where appropriate.
+5. Plan the smallest clean implementation.
+6. Implement incrementally.
+7. Run relevant tests/checks.
+8. Report what changed.
+
+Do not rewrite working code unnecessarily.
+
+Do not introduce duplicate implementations of the same functionality.
+
+---
+
+# 3. Spec-Driven Development
+
+Do not implement major features directly from a casual user request.
+
+Follow:
+
+```text
+Specification
+    ↓
+Plan
+    ↓
+Implementation
+    ↓
+Verification
+```
+
+Before implementing a feature, identify:
+
+* requirements
+* acceptance criteria
+* affected modules
+* database changes
+* API changes
+* frontend changes
+* background jobs
+* security implications
+* testing requirements
+
+If the requirement is ambiguous and the ambiguity affects architecture or correctness, stop and ask for clarification.
+
+For minor ambiguity, choose the simplest reasonable interpretation and document the assumption.
+
+---
+
+# 4. Repository Inspection
+
+Before changing code:
+
+Inspect:
+
+```text
+package.json
+tsconfig.json
+environment configuration
+Prisma schema
+existing modules
+existing API routes
+existing components
+existing tests
+queue configuration
+authentication
+authorization
+```
+
+Do not assume the repository structure.
+
+Use the existing architecture unless there is a documented reason to change it.
+
+---
+
+# 5. Database Rules
+
+Use Prisma for application database access.
+
+Never write raw SQL for normal CRUD when Prisma can safely perform the operation.
+
+Raw SQL may be used when:
+
+* analytics require it
+* PostgreSQL-specific functionality is required
+* Prisma cannot efficiently express the query
+
+All raw SQL must be carefully reviewed.
+
+---
+
+# 6. Tenant Isolation
+
+Every workspace-scoped operation MUST verify:
+
+```text
+authenticated user
+        ↓
+organization membership
+        ↓
+workspace membership/access
+        ↓
+resource ownership
+```
+
+Never trust IDs supplied by the frontend.
+
+Bad:
+
+```text
+GET /workspaces/:workspaceId/datasets
+```
+
+and simply query:
+
+```text
+dataset.workspaceId = workspaceId
+```
+
+without checking whether the current user has access.
+
+Correct behavior:
+
+```text
+authenticate
+→ authorize organization
+→ authorize workspace
+→ query resource
+```
+
+---
+
+# 7. External Database Access — CRITICAL
+
+External customer databases are READ-ONLY.
+
+This is a mandatory rule.
+
+Never generate or execute:
+
+```sql
+INSERT
+UPDATE
+DELETE
+DROP
+ALTER
+TRUNCATE
+CREATE
+GRANT
+REVOKE
+```
+
+against customer databases.
+
+Only analytics/read operations are allowed.
+
+Prefer:
+
+```sql
+SELECT
+```
+
+and safe read-only constructs.
+
+---
+
+# 8. AI-Generated SQL
+
+Never directly execute AI-generated SQL without validation.
+
+Pipeline:
+
+```text
+User question
+    ↓
+Agent
+    ↓
+SQL generation
+    ↓
+SQL validation
+    ↓
+Read-only verification
+    ↓
+Timeout / limits
+    ↓
+Execution
+    ↓
+Result validation
+    ↓
+Agent interpretation
+```
+
+Reject dangerous statements.
+
+Apply:
+
+* query timeout
+* row limits
+* statement restrictions
+* appropriate database permissions
+
+The AI must never receive database credentials.
+
+---
+
+# 9. Database Credentials
+
+Customer database credentials MUST:
+
+* stay on the backend
+* never be returned to frontend
+* never be placed in AI prompts
+* never be logged
+* never be included in API responses
+
+If credentials need to be persisted, use an appropriate secure storage strategy.
+
+Do not create a plain-text credentials table simply for convenience.
+
+---
+
+# 10. AI Agent Rules
+
+Agents should reason over actual data.
+
+Do not write prompts such as:
+
+> "Pretend you know the company's revenue."
+
+Instead provide tools.
+
+Example:
+
+```text
+get_dataset_schema()
+run_readonly_sql()
+calculate_metric()
+compare_periods()
+```
+
+If the required data does not exist:
+
+> Tell the user that the available data is insufficient.
+
+Do not invent a result.
+
+---
+
+# 11. LLM vs Backend Calculations
+
+Use backend code for deterministic calculations.
+
+For example:
+
+```text
+Revenue change
+Profit margin
+Percentage change
+Simulation arithmetic
+Alert thresholds
+```
+
+The agent can decide which calculation to request.
+
+The calculation itself should preferably be performed by deterministic application code or SQL.
+
+---
+
+# 12. Business Simulator
+
+The simulator is a separate product feature.
+
+Do not implement it as:
+
+```text
+prompt → LLM → random projection
+```
+
+Instead:
+
+```text
+Scenario
+    ↓
+Validate inputs
+    ↓
+Retrieve historical data
+    ↓
+Select calculation/model
+    ↓
+Calculate projection
+    ↓
+Generate assumptions
+    ↓
+AI explanation
+    ↓
+UI result
+```
+
+Every simulation must display assumptions.
+
+---
+
+# 13. AI Findings
+
+When an agent makes a business claim, prefer to provide evidence.
+
+Example:
+
+```text
+Claim:
+Revenue decreased 12%.
+
+Evidence:
+Current period = $105,000
+Previous period = $119,000
+Change = -11.76%
+```
+
+Do not output unsupported business claims.
+
+---
+
+# 14. Correlation vs Causation
+
+Do not allow the AI to state:
+
+> Inventory caused revenue to decrease.
+
+unless the system has sufficient evidence to establish causality.
+
+Prefer:
+
+> Revenue decreased during a period when inventory availability also declined.
+
+or:
+
+> Inventory availability appears to be a potential contributing factor.
+
+---
+
+# 15. Background Jobs
+
+Long-running tasks must use the queue.
+
+Examples:
+
+```text
+Excel processing
+CSV processing
+large imports
+database sync
+anomaly detection
+weekly reports
+email delivery
+scheduled jobs
+```
+
+Do not perform these operations inside a normal request if they can take significant time.
+
+---
+
+# 16. Queue Job Rules
+
+Every job should have:
+
+* unique job identifier
+* workspace context
+* status
+* retries
+* failure handling
+* structured logs
+
+Jobs should be idempotent where possible.
+
+A retry must not accidentally:
+
+* duplicate imports
+* send duplicate emails
+* create duplicate reports
+* create duplicate recommendations
+
+---
+
+# 17. File Upload Rules
+
+Uploaded files must be:
+
+* size limited
+* type validated
+* processed server-side
+* scanned/validated before parsing where appropriate
+
+Do not trust:
+
+```text
+filename
+extension
+MIME type
+user-provided metadata
+```
+
+Do not execute uploaded files.
+
+Original files may be stored in R2.
+
+---
+
+# 18. API Rules
+
+Use:
+
+```text
+Route
+ ↓
+Controller
+ ↓
+Service
+ ↓
+Database/Repository
+```
+
+Do not place large business workflows inside route files.
+
+Controllers should remain thin.
+
+Services contain business logic.
+
+---
+
+# 19. Validation
+
+Validate external input using Zod or the project's established validation approach.
+
+Validate:
+
+* request body
+* query parameters
+* path parameters
+* uploaded file metadata
+* connection configuration
+* simulation parameters
+* alert rules
+
+Never assume frontend validation is sufficient.
+
+---
+
+# 20. Frontend Rules
+
+Use TypeScript strictly.
+
+Avoid:
+
+```ts
+any
+```
+
+unless there is a documented reason.
+
+Use reusable components.
+
+Do not duplicate the same UI pattern unnecessarily.
+
+Use proper states:
+
+```text
+Loading
+Success
+Empty
+Error
+Unauthorized
+Forbidden
+```
+
+---
+
+# 21. AI UI Rules
+
+Do not make the entire application look like ChatGPT.
+
+Use different interfaces for different jobs:
+
+```text
+AI Analyst
+    → conversational
+
+Investigation
+    → structured analysis
+
+Business Simulator
+    → forms + charts + scenario comparison
+
+Recommendations
+    → action cards
+
+Dashboard
+    → analytics
+
+Reports
+    → document/report UI
+```
+
+---
+
+# 22. Dashboard Rules
+
+Dashboard metrics must come from actual datasets.
+
+If a metric cannot be calculated because data is missing:
+
+Do not display a fake value.
+
+Display:
+
+> Not enough data available.
+
+or hide the metric appropriately.
+
+---
+
+# 23. Recommendations
+
+Recommendations must have a source.
+
+Possible sources:
+
+```text
+Anomaly Detection
+AI Investigation
+Business Rule
+Simulation
+```
+
+Store enough information to explain why the recommendation was created.
+
+---
+
+# 24. Email Rules
+
+Email sending must happen through a background job.
+
+Do not block API requests while sending emails.
+
+Before sending:
+
+* validate recipient
+* validate template data
+* record job
+* handle retry
+* avoid duplicate sends
+
+Do not send emails during development unless the user explicitly configures a development email system.
+
+---
+
+# 25. Error Handling
+
+Never expose:
+
+```text
+stack traces
+database connection strings
+API keys
+internal paths
+secrets
+```
+
+to the frontend.
+
+Return safe error messages.
+
+Log detailed technical errors server-side.
+
+---
+
+# 26. Environment Variables
+
+Never hard-code:
+
+```text
+API keys
+passwords
+database URLs
+R2 credentials
+email credentials
+session secrets
+```
+
+Use `.env`.
+
+Maintain `.env.example`.
+
+Never commit actual secrets.
+
+---
+
+# 27. Prisma Migration Rules
+
+Before changing the database:
+
+1. Understand the existing schema.
+2. Modify Prisma schema.
+3. Generate migration.
+4. Run migration.
+5. Generate Prisma client.
+6. Run tests.
+
+Do not manually edit generated Prisma client files.
+
+Do not delete migrations simply to fix development problems without understanding the consequences.
+
+---
+
+# 28. Testing
+
+After implementing meaningful functionality, run appropriate:
+
+```text
+TypeScript check
+Lint
+Unit tests
+Integration tests
+```
+
+For critical workflows, add end-to-end coverage.
+
+Do not mark a feature complete solely because the UI renders.
+
+---
+
+# 29. No Fake Implementations
+
+Do not create fake:
+
+```text
+AI responses
+database results
+revenue values
+simulation numbers
+recommendations
+reports
+connection status
+```
+
+unless the feature is explicitly a mocked prototype.
+
+If something is not implemented yet, use:
+
+```text
+TODO
+Not implemented
+Coming soon
+```
+
+rather than pretending it works.
+
+---
+
+# 30. Dependency Rules
+
+Before adding a package:
+
+1. Check whether the functionality already exists.
+2. Check existing dependencies.
+3. Prefer established project dependencies.
+4. Add a new package only when it provides meaningful value.
+
+Do not introduce unnecessary libraries.
+
+---
+
+# 31. Architecture Changes
+
+Do not silently:
+
+* replace Express
+* replace PostgreSQL
+* replace Prisma
+* replace Redis
+* replace OpenAI Agents SDK
+* replace Groq
+* introduce another backend
+* change authentication
+* change multi-tenancy
+
+If a major architectural change appears necessary:
+
+1. Explain why.
+2. Explain alternatives.
+3. Explain tradeoffs.
+4. Ask for approval before making the change.
+
+---
+
+# 32. Code Quality
+
+Prefer:
+
+* small functions
+* explicit types
+* meaningful names
+* modular services
+* reusable components
+* clear error handling
+* testable logic
+
+Avoid:
+
+* giant files
+* giant functions
+* deeply nested conditionals
+* duplicate logic
+* unnecessary abstractions
+* hidden side effects
+
+---
+
+# 33. Comments
+
+Do not comment obvious code.
+
+Use comments for:
+
+* security decisions
+* unusual algorithms
+* business rules
+* non-obvious database behavior
+* important architectural constraints
+
+---
+
+# 34. Before Finishing a Task
+
+Before reporting a task as complete:
+
+```text
+[ ] Requirement implemented
+[ ] Existing architecture preserved
+[ ] Authorization checked
+[ ] Tenant isolation checked
+[ ] Input validated
+[ ] Errors handled
+[ ] Tests added/updated
+[ ] TypeScript passes
+[ ] Lint passes
+[ ] No secrets added
+[ ] No dangerous SQL
+[ ] Documentation updated if required
+```
+
+---
+
+# 35. Response Format
+
+When completing a coding task, report:
+
+## Changed
+
+List important files/features changed.
+
+## Architecture
+
+Briefly explain the implementation.
+
+## Security
+
+Mention relevant security considerations.
+
+## Testing
+
+List checks/tests performed.
+
+## Remaining
+
+Mention anything intentionally not implemented.
+
+Do not claim a test passed unless it was actually run.

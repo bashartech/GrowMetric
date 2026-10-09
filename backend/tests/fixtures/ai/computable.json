@@ -1,0 +1,20 @@
+{
+  "model": "mock-model-v1",
+  "inputTokens": 12,
+  "outputTokens": 7,
+  "description": "Happy path: two tool calls then a compliant final answer that only uses numbers returned by tools.",
+  "turns": [
+    {
+      "toolCalls": [
+        { "name": "get_workspace_datasets", "arguments": {} },
+        { "name": "calculate_metric", "arguments": { "datasetId": "00000000-0000-0000-0000-000000000001", "metricKey": "revenue" } }
+      ]
+    },
+    {
+      "final": {
+        "content": "Revenue was 482100.5 USD. This value is the sum of the `total` column, computed by the tool (CALCULATED).",
+        "includesForeignFigures": false
+      }
+    }
+  ]
+}

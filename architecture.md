@@ -1,10 +1,10 @@
-# DecisionDesk — AI Business Intelligence & Decision Platform
+# GrowMetrics — AI Business Intelligence & Decision Platform
 
 ## 1. Project Definition
 
-Build a production-quality, multi-tenant SaaS application called **DecisionDesk**.
+Build a production-quality, multi-tenant SaaS application called **GrowMetrics**.
 
-DecisionDesk is an **AI-powered Business Intelligence and Decision Intelligence platform**.
+GrowMetrics is an **AI-powered Business Intelligence and Decision Intelligence platform**.
 
 The platform allows a business to:
 
@@ -48,7 +48,7 @@ This should be a serious portfolio project that can be discussed in interviews f
 
 # 2. Important Product Boundary
 
-Do NOT turn DecisionDesk into:
+Do NOT turn GrowMetrics into:
 
 * A generic chatbot
 * An "AI employee"
@@ -57,7 +57,7 @@ Do NOT turn DecisionDesk into:
 * A recruitment agent
 * A customer-support platform
 
-DecisionDesk is specifically a:
+GrowMetrics is specifically a:
 
 > **Business Intelligence + Decision Intelligence SaaS platform**
 
@@ -119,7 +119,6 @@ PostgreSQL stores application data such as:
 * users
 * organizations
 * workspaces
-* memberships
 * subscriptions
 * datasets
 * data sources
@@ -283,9 +282,33 @@ Workspace
   +---- Alerts
 ```
 
-A user can belong to an organization through a membership.
+## Single-Account Model
 
-Example roles:
+For the initial version, GrowMetrics ships a **single-account model** per organization
+to keep the first release focused:
+
+* A user registers an account and provides an organization name.
+* Registration creates a `User`, its `Organization`, and a default `Workspace`
+  in one transaction.
+* The single user implicitly owns the organization. No memberships, invitations,
+  or team management are implemented in this phase.
+* There are no role-based permissions (OWNER/ADMIN/MANAGER/ANALYST/VIEWER) yet.
+  Feature access is controlled by the subscription plan (see §38).
+* A `role` column (default `OWNER`) is reserved on the user record so
+  multi-user roles can be introduced later without a schema redesign.
+
+## Tenant Isolation
+
+Every workspace-scoped database operation must enforce tenant isolation.
+
+Never allow a user from Organization A to access Organization B's data by manipulating an ID in an API request.
+
+Always derive authorization from the authenticated user's own organization/workspace record, never from client-supplied IDs.
+
+## Future Multi-User Model
+
+When multi-user support is added, users will belong to an organization through a
+membership, with roles such as:
 
 ```text
 OWNER
@@ -294,12 +317,6 @@ MANAGER
 ANALYST
 VIEWER
 ```
-
-Every workspace-scoped database operation must enforce tenant isolation.
-
-Never allow a user from Organization A to access Organization B's data by manipulating an ID in an API request.
-
-Always derive authorization from the authenticated user's organization/workspace membership.
 
 ---
 
@@ -328,17 +345,20 @@ Use secure cookies/tokens according to the selected authentication architecture.
 After registration:
 
 ```text
-Create Account
+Create Account (includes Organization name)
       |
       v
 Create Organization
       |
       v
-Create Workspace
+Create Workspace (default, automatic)
       |
       v
 Add Business Data
 ```
+
+In the initial single-account model, registration is a single step that
+creates the user, the organization, and a default workspace in one transaction.
 
 Example:
 
@@ -350,7 +370,9 @@ Workspace:
 Main Business
 ```
 
-The user should then see:
+After registration the frontend redirects the user to an onboarding page.
+
+For a brand-new account the onboarding page shows the empty state:
 
 > Let's connect your business data.
 
@@ -361,6 +383,8 @@ Upload Excel
 Upload CSV
 Connect Database
 ```
+
+For returning accounts the frontend routes to the overview page instead.
 
 Additional data-source options can be added later.
 
@@ -440,13 +464,13 @@ The architecture should make adding additional database engines possible later.
 
 This is extremely important.
 
-DecisionDesk must connect to customer databases using **read-only credentials**.
+GrowMetrics must connect to customer databases using **read-only credentials**.
 
 The application must never request or require write access for analytics.
 
 The UI should clearly communicate:
 
-> DecisionDesk requires read-only database access for analytics.
+> GrowMetrics requires read-only database access for analytics.
 
 Where supported, recommend that customers create a dedicated read-only database user.
 
@@ -503,7 +527,7 @@ Create data source
 
 Do not automatically ingest the entire customer database.
 
-Allow the user to select which tables are available to DecisionDesk.
+Allow the user to select which tables are available to GrowMetrics.
 
 For example:
 
@@ -1164,7 +1188,7 @@ Every recommendation should have:
 
 # 24. Automated Anomaly Detection
 
-DecisionDesk should proactively detect important business changes.
+GrowMetrics should proactively detect important business changes.
 
 Examples:
 
@@ -1264,7 +1288,7 @@ Example email:
 
 ```text
 Subject:
-DecisionDesk Alert: Revenue decreased 14%
+GrowMetrics Alert: Revenue decreased 14%
 
 Revenue decreased significantly compared
 with the previous period.
@@ -1272,7 +1296,7 @@ with the previous period.
 Main detected contributors:
 ...
 
-Open DecisionDesk to investigate.
+Open GrowMetrics to investigate.
 ```
 
 Email sending should happen through a background queue rather than blocking the API request.
@@ -1634,7 +1658,6 @@ Design the schema around concepts such as:
 ```text
 User
 Organization
-Membership
 Workspace
 
 DataSource
@@ -1961,13 +1984,14 @@ Data Hub
   ├── Data Quality
   └── Import History
 
-Team
-
 Audit Logs
 
 Settings
 Billing
 ```
+
+`Team` is intentionally omitted in the initial single-account model. It can be
+reintroduced when multi-user roles and memberships are added.
 
 ---
 
@@ -2522,7 +2546,7 @@ After the architecture is approved, implement the application phase by phase.
 
 # 61. Final Product Principle
 
-DecisionDesk should answer four fundamental business questions:
+GrowMetrics should answer four fundamental business questions:
 
 ```text
 WHAT is happening?

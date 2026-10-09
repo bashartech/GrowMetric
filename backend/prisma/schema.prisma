@@ -1,0 +1,1270 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  OWNER
+  ADMIN
+  MEMBER
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  PAST_DUE
+  CANCELED
+}
+
+enum JobStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
+enum AnomalyStatus {
+  OPEN
+  ACKNOWLEDGED
+  RESOLVED
+}
+
+enum RecommendationSeverity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum RecommendationSource {
+  ANOMALY
+  INVESTIGATION
+  RULE
+  SIMULATION
+  SYSTEM
+}
+
+enum RecommendationStatus {
+  OPEN
+  ACKNOWLEDGED
+  RESOLVED
+  DISMISSED
+}
+
+enum AlertCondition {
+  GREATER_THAN
+  LESS_THAN
+  EQUAL_TO
+  CHANGES_BY
+}
+
+enum AlertRuleFrequency {
+  DAILY
+  WEEKLY
+  MONTHLY
+  CUSTOM
+}
+
+enum AlertSeverity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum AlertStatus {
+  OPEN
+  ACKNOWLEDGED
+  RESOLVED
+}
+
+enum ReportKind {
+  WEEKLY
+  MONTHLY
+  CUSTOM
+}
+
+enum ReportType {
+  METRICS
+  INVESTIGATION
+}
+
+enum ReportStatus {
+  DRAFT
+  GENERATED
+  FAILED
+}
+
+enum ReportScheduleFrequency {
+  DAILY
+  WEEKLY
+  MONTHLY
+  CUSTOM
+}
+
+enum EmailDeliveryStatus {
+  QUEUED
+  SENT
+  FAILED
+  BOUNCED
+}
+
+model User {
+  id             String    @id @default(uuid()) @db.Uuid
+  name           String
+  email          String    @unique
+  passwordHash   String
+  role           Role      @default(OWNER)
+  organizationId String    @db.Uuid
+  lastLoginAt    DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  organization  Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  sessions      AuthSession[]
+  notifications Notification[]
+  auditLogs     AuditLog[]     @relation("AuditActor")
+  dataSources   DataSource[]   @relation("DataSourceCreator")
+  conversations Conversation[]
+  investigations Investigation[]
+  simulations   Simulation[]
+  alertRules    AlertRule[]
+
+  @@index([organizationId])
+}
+
+model Organization {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String
+  slug      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users           User[]
+  workspaces      Workspace[]
+  subscription    Subscription?
+  usageRecords    UsageRecord[]
+  auditLogs       AuditLog[]
+  jobs            Job[]
+  dataSources     DataSource[]
+  importJobs      ImportJob[]
+  datasets        Dataset[]
+  businessMetrics BusinessMetric[]
+  dashboards      Dashboard[]
+  conversations   Conversation[]
+  agentRuns       AgentRun[]
+  investigations  Investigation[]
+  simulations     Simulation[]
+  mappingSuggestions MappingSuggestion[]
+  reportSchedules ReportSchedule[]
+}
+
+model Workspace {
+  id             String   @id @default(uuid()) @db.Uuid
+  name           String
+  slug           String
+  isDefault      Boolean  @default(false)
+  organizationId String   @db.Uuid
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization    Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  auditLogs       AuditLog[]
+  dataSources     DataSource[]
+  importJobs      ImportJob[]
+  datasets        Dataset[]
+  businessMetrics BusinessMetric[]
+  dashboards      Dashboard[]
+  conversations   Conversation[]
+  agentRuns       AgentRun[]
+  investigations  Investigation[]
+  simulations     Simulation[]
+  mappingSuggestions MappingSuggestion[]
+
+  @@unique([organizationId, slug])
+  @@index([organizationId])
+}
+
+model AuthSession {
+  id               String    @id @default(uuid()) @db.Uuid
+  userId           String    @db.Uuid
+  refreshTokenHash String    @unique
+  userAgent        String?
+  ipAddress        String?
+  expiresAt        DateTime
+  revokedAt        DateTime?
+  createdAt        DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model Plan {
+  id            String   @id @default(uuid()) @db.Uuid
+  key           String   @unique
+  name          String
+  featureLimits Json
+  priceMonthly  Int      @default(0)
+  createdAt     DateTime @default(now())
+
+  subscriptions Subscription[]
+}
+
+model Subscription {
+  id                 String             @id @default(uuid()) @db.Uuid
+  organizationId     String             @unique @db.Uuid
+  planId             String             @db.Uuid
+  status             SubscriptionStatus @default(ACTIVE)
+  currentPeriodStart DateTime
+  currentPeriodEnd   DateTime
+  cancelAtPeriodEnd  Boolean            @default(false)
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  plan         Plan         @relation(fields: [planId], references: [id])
+
+  @@index([planId])
+  @@index([currentPeriodEnd])
+}
+
+model UsageRecord {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @db.Uuid
+  metric         String
+  periodStart    DateTime
+  periodEnd      DateTime
+  amount         Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, metric, periodStart])
+  @@index([organizationId])
+}
+
+model AuditLog {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @db.Uuid
+  workspaceId    String?  @db.Uuid
+  actorUserId    String?  @db.Uuid
+  action         String
+  resourceType   String
+  resourceId     String?
+  metadata       Json?
+  ipAddress      String?
+  userAgent      String?
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  workspace    Workspace?   @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
+  actor        User?        @relation("AuditActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, createdAt])
+  @@index([action])
+  @@index([workspaceId])
+}
+
+model Job {
+  id             String    @id @default(uuid()) @db.Uuid
+  organizationId String?   @db.Uuid
+  type           String
+  payload        Json
+  status         JobStatus @default(PENDING)
+  attempts       Int       @default(0)
+  maxAttempts    Int       @default(3)
+  runAt          DateTime  @default(now())
+  startedAt      DateTime?
+  completedAt    DateTime?
+  lastError      String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  importJob    ImportJob?
+  agentRuns    AgentRun[]
+  emailDeliveries EmailDelivery[]
+
+  @@index([status, runAt])
+  @@index([type])
+  @@index([organizationId])
+}
+
+model Notification {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @db.Uuid
+  type      String
+  title     String
+  body      String
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+}
+
+// === Phase 2: Data Layer ===
+
+enum DataSourceKind {
+  FILE
+  EXTERNAL_DB
+}
+
+enum DataSourceStatus {
+  NEW
+  CONNECTED
+  VALIDATED
+  FAILED
+  DISABLED
+}
+
+enum ExternalDbEngine {
+  POSTGRES
+}
+
+enum ImportSource {
+  UPLOAD
+  TABLE_SYNC
+}
+
+enum ImportStatus {
+  QUEUED
+  RUNNING
+  REQUESTING_MAPPING
+  COMPLETED
+  FAILED
+}
+
+enum DatasetKind {
+  SALES
+  CUSTOMERS
+  PRODUCTS
+  INVENTORY
+  EXPENSES
+  ORDERS
+  CUSTOM
+}
+
+enum DatasetStatus {
+  DRAFT
+  READY
+  READY_WITH_WARNINGS
+  ERROR
+}
+
+enum DatasetVersionStatus {
+  BUILDING
+  READY
+}
+
+enum DatasetCommit {
+  APPEND
+  REPLACE
+  UPSERT
+}
+
+enum ColumnType {
+  TEXT
+  INTEGER
+  DECIMAL
+  BOOLEAN
+  TIMESTAMP
+  DATE
+  TIME
+}
+
+enum RelationshipType {
+  MANY_TO_ONE
+  ONE_TO_ONE
+}
+
+enum DetectionMethod {
+  RULES
+  USER
+}
+
+enum QualityStatus {
+  CLEAN
+  WARNINGS
+  ERROR
+}
+
+enum MetricKind {
+  REVENUE
+  ORDERS
+  CUSTOMERS
+  EXPENSES
+  PROFIT
+  INVENTORY
+  CUSTOM
+}
+
+enum WidgetType {
+  KPI
+  LINE
+  BAR
+  PIE
+  TABLE
+}
+
+model DataSource {
+  id             String           @id @default(uuid()) @db.Uuid
+  organizationId String           @db.Uuid
+  workspaceId    String           @db.Uuid
+  name           String
+  kind           DataSourceKind
+  status         DataSourceStatus @default(NEW)
+  lastSyncAt     DateTime?
+  createdById    String?          @db.Uuid
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  organization Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  workspace    Workspace             @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  creator      User?                 @relation("DataSourceCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  tables       DataSourceTable[]
+  credential   DataSourceCredential?
+  importFiles  ImportFile[]
+  imports      ImportJob[]
+  datasets     Dataset[]
+
+  @@index([organizationId])
+  @@index([workspaceId])
+}
+
+model DataSourceCredential {
+  id           String           @id @default(uuid()) @db.Uuid
+  dataSourceId String           @unique @db.Uuid
+  engine       ExternalDbEngine
+  host         String
+  port         Int              @default(5432)
+  database     String
+  username     String
+  passwordEnc  String
+  sslMode      String           @default("require")
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  dataSource DataSource @relation(fields: [dataSourceId], references: [id], onDelete: Cascade)
+}
+
+model DataSourceTable {
+  id                  String   @id @default(uuid()) @db.Uuid
+  dataSourceId        String   @db.Uuid
+  schemaName          String
+  tableName           String
+  columnCount         Int      @default(0)
+  rowEstimate         Int      @default(0)
+  isSelected          Boolean  @default(false)
+  syncMode            String   @default("REPLACE")
+  upsertKeyColumnName String?
+  profile             Json?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  dataSource DataSource @relation(fields: [dataSourceId], references: [id], onDelete: Cascade)
+
+  @@unique([dataSourceId, schemaName, tableName])
+  @@index([dataSourceId])
+}
+
+model ImportFile {
+  id           String   @id @default(uuid()) @db.Uuid
+  dataSourceId String   @db.Uuid
+  originalName String
+  storageKey   String
+  mimeType     String
+  sizeBytes    Int
+  checksum     String
+  createdAt    DateTime @default(now())
+
+  dataSource DataSource  @relation(fields: [dataSourceId], references: [id], onDelete: Cascade)
+  imports    ImportJob[]
+
+  @@index([dataSourceId])
+}
+
+model ImportJob {
+  id             String       @id @default(uuid()) @db.Uuid
+  organizationId String       @db.Uuid
+  workspaceId    String       @db.Uuid
+  jobId          String       @unique @db.Uuid
+  dataSourceId   String       @db.Uuid
+  datasetId      String?      @db.Uuid
+  fileId         String?      @db.Uuid
+  source         ImportSource
+  status         ImportStatus @default(QUEUED)
+  filename       String
+  totalRows      Int?
+  processedRows  Int?
+  error          String?
+  startedAt      DateTime?
+  completedAt    DateTime?
+  createdAt      DateTime     @default(now())
+
+  job          Job              @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  dataSource   DataSource       @relation(fields: [dataSourceId], references: [id], onDelete: Cascade)
+  file         ImportFile?      @relation(fields: [fileId], references: [id], onDelete: SetNull)
+  dataset      Dataset?         @relation(fields: [datasetId], references: [id], onDelete: SetNull)
+  versions     DatasetVersion[]
+  organization Organization     @relation(fields: [organizationId], references: [id])
+  workspace    Workspace        @relation(fields: [workspaceId], references: [id])
+  mappingSuggestions MappingSuggestion[]
+
+  @@index([organizationId])
+  @@index([workspaceId])
+  @@index([dataSourceId])
+  @@index([createdAt])
+}
+
+model Dataset {
+  id               String        @id @default(uuid()) @db.Uuid
+  organizationId   String        @db.Uuid
+  workspaceId      String        @db.Uuid
+  dataSourceId     String        @db.Uuid
+  name             String
+  kind             DatasetKind   @default(CUSTOM)
+  sourceTable      String?
+  status           DatasetStatus @default(DRAFT)
+  currentVersionId String?       @db.Uuid
+  rowCount         Int           @default(0)
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  organization     Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  workspace        Workspace             @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  dataSource       DataSource            @relation(fields: [dataSourceId], references: [id], onDelete: Cascade)
+  imports          ImportJob[]
+  versions         DatasetVersion[]
+  columns          DatasetColumn[]
+  rows             DatasetRow[]
+  qualityReports   DataQualityReport[]
+  relationships    DatasetRelationship[]
+  metrics          BusinessMetric[]
+  dashboardWidgets DashboardWidget[]
+  investigations   Investigation[]
+  reports          Report[]
+  simulations      Simulation[]
+  mappingSuggestions MappingSuggestion[]
+  anomalyDetections AnomalyDetection[]
+  alertRules         AlertRule[]
+
+  @@index([organizationId, workspaceId])
+  @@index([dataSourceId])
+}
+
+model DatasetVersion {
+  id          String               @id @default(uuid()) @db.Uuid
+  datasetId   String               @db.Uuid
+  version     Int
+  importJobId String?              @db.Uuid
+  commit      DatasetCommit
+  source      String
+  status      DatasetVersionStatus @default(BUILDING)
+  summary     Json?
+  createdAt   DateTime             @default(now())
+
+  dataset       Dataset            @relation(fields: [datasetId], references: [id], onDelete: Cascade)
+  importJob     ImportJob?         @relation(fields: [importJobId], references: [id], onDelete: SetNull)
+  columns       DatasetColumn[]
+  rows          DatasetRow[]
+  qualityReport DataQualityReport?
+
+  @@unique([datasetId, version])
+  @@index([datasetId])
+}
+
+model DatasetColumn {
+  id                   String     @id @default(uuid()) @db.Uuid
+  datasetId            String     @db.Uuid
+  datasetVersionId     String     @db.Uuid
+  name                 String
+  type                 ColumnType
+  ordinalPosition      Int
+  isNullable           Boolean    @default(true)
+  semanticKey          String?
+  businessMeaning      String?
+  representativeSample Json?
+  createdAt            DateTime   @default(now())
+
+  dataset               Dataset                @relation(fields: [datasetId], references: [id], onDelete: Cascade)
+  version               DatasetVersion         @relation(fields: [datasetVersionId], references: [id], onDelete: Cascade)
+  datasetTextValues     DatasetTextValue[]
+  datasetNumericValues  DatasetNumericValue[]
+  datasetDatetimeValues DatasetDatetimeValue[]
+  datasetBooleanValues  DatasetBooleanValue[]
+  mappingSuggestions    MappingSuggestion[]
+
+  @@index([datasetId, ordinalPosition])
+  @@index([datasetVersionId])
+}
+
+model DatasetRow {
+  id               String   @id @default(uuid()) @db.Uuid
+  datasetId        String   @db.Uuid
+  datasetVersionId String   @db.Uuid
+  rowIndex         Int
+  createdAt        DateTime @default(now())
+
+  dataset        Dataset                @relation(fields: [datasetId], references: [id], onDelete: Cascade)
+  version        DatasetVersion         @relation(fields: [datasetVersionId], references: [id], onDelete: Cascade)
+  textValues     DatasetTextValue[]
+  numericValues  DatasetNumericValue[]
+  datetimeValues DatasetDatetimeValue[]
+  booleanValues  DatasetBooleanValue[]
+
+  @@unique([datasetVersionId, rowIndex])
+  @@index([datasetId])
+}
+
+model DatasetTextValue {
+  rowId    String @db.Uuid
+  columnId String @db.Uuid
+  value    String
+
+  row    DatasetRow    @relation(fields: [rowId], references: [id], onDelete: Cascade)
+  column DatasetColumn @relation(fields: [columnId], references: [id], onDelete: Cascade)
+
+  @@id([rowId, columnId])
+  @@index([columnId])
+}
+
+model DatasetNumericValue {
+  rowId    String  @db.Uuid
+  columnId String  @db.Uuid
+  value    Decimal @db.Decimal
+
+  row    DatasetRow    @relation(fields: [rowId], references: [id], onDelete: Cascade)
+  column DatasetColumn @relation(fields: [columnId], references: [id], onDelete: Cascade)
+
+  @@id([rowId, columnId])
+  @@index([columnId])
+}
+
+model DatasetDatetimeValue {
+  rowId    String   @db.Uuid
+  columnId String   @db.Uuid
+  value    DateTime
+
+  row    DatasetRow    @relation(fields: [rowId], references: [id], onDelete: Cascade)
+  column DatasetColumn @relation(fields: [columnId], references: [id], onDelete: Cascade)
+
+  @@id([rowId, columnId])
+  @@index([columnId])
+}
+
+model DatasetBooleanValue {
+  rowId    String  @db.Uuid
+  columnId String  @db.Uuid
+  value    Boolean
+
+  row    DatasetRow    @relation(fields: [rowId], references: [id], onDelete: Cascade)
+  column DatasetColumn @relation(fields: [columnId], references: [id], onDelete: Cascade)
+
+  @@id([rowId, columnId])
+  @@index([columnId])
+}
+
+model DatasetRelationship {
+  id               String           @id @default(uuid()) @db.Uuid
+  datasetId        String           @db.Uuid
+  sourceColumnId   String           @db.Uuid
+  targetDatasetId  String?          @db.Uuid
+  targetColumnId   String?          @db.Uuid
+  relationshipType RelationshipType
+  detectedBy       DetectionMethod
+  confidence       Decimal          @db.Decimal
+  isConfirmed      Boolean          @default(false)
+  createdAt        DateTime         @default(now())
+
+  dataset Dataset @relation(fields: [datasetId], references: [id], onDelete: Cascade)
+
+  @@index([datasetId])
+}
+
+model DataQualityReport {
+  id                  String        @id @default(uuid()) @db.Uuid
+  datasetId           String        @db.Uuid
+  datasetVersionId    String        @unique @db.Uuid
+  totalRows           Int
+  columnCount         Int
+  missingValuePct     Decimal       @db.Decimal
+  duplicateRowPct     Decimal       @db.Decimal
+  invalidNumberPct    Decimal       @db.Decimal
+  invalidDatePct      Decimal       @db.Decimal
+  numericOutlierCount Int           @default(0)
+  status              QualityStatus
+  detail              Json?
+  createdAt           DateTime      @default(now())
+
+  dataset Dataset        @relation(fields: [datasetId], references: [id], onDelete: Cascade)
+  version DatasetVersion @relation(fields: [datasetVersionId], references: [id], onDelete: Cascade)
+
+  @@index([datasetId])
+}
+
+model BusinessMetric {
+  id             String     @id @default(uuid()) @db.Uuid
+  organizationId String     @db.Uuid
+  workspaceId    String     @db.Uuid
+  datasetId      String?    @db.Uuid
+  name           String
+  kind           MetricKind
+  definition     Json
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  organization Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  workspace    Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  dataset      Dataset?          @relation(fields: [datasetId], references: [id], onDelete: SetNull)
+  widgets      DashboardWidget[]
+
+  @@index([organizationId])
+  @@index([workspaceId])
+}
+
+model Dashboard {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @db.Uuid
+  workspaceId    String   @db.Uuid
+  name           String   @default("Business Dashboard")
+  layout         Json?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  workspace    Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  widgets      DashboardWidget[]
+
+  @@index([organizationId])
+  @@index([workspaceId])
+}
+
+model DashboardWidget {
+  id          String     @id @default(uuid()) @db.Uuid
+  dashboardId String     @db.Uuid
+  type        WidgetType
+  metricId    String?    @db.Uuid
+  datasetId   String?    @db.Uuid
+  config      Json?
+  position    Json?
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  dashboard Dashboard       @relation(fields: [dashboardId], references: [id], onDelete: Cascade)
+  metric    BusinessMetric? @relation(fields: [metricId], references: [id], onDelete: SetNull)
+  dataset   Dataset?        @relation(fields: [datasetId], references: [id], onDelete: SetNull)
+
+  @@index([dashboardId])
+}
+
+// === Phase 3: AI Layer ===
+
+enum ConversationKind {
+  ANALYST
+}
+
+enum MessageRole {
+  USER
+  ASSISTANT
+  TOOL
+}
+
+enum MessageKind {
+  CHAT
+  FINDING
+  CHART
+  ERROR
+}
+
+enum EvidenceClass {
+  OBSERVED
+  CALCULATED
+  INFERRED
+  PROJECTED
+  RECOMMENDED
+}
+
+enum AgentKind {
+  ANALYST
+  INVESTIGATION
+  SIMULATION
+  MAPPING
+}
+
+enum AgentRunStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+  STOPPED
+}
+
+enum ToolCallStatus {
+  SUCCESS
+  ERROR
+  TIMEOUT
+  STOPPED
+}
+
+enum InvestigationStatus {
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
+enum FindingLevel {
+  MAIN
+  SUPPORTING
+  CORRELATION
+}
+
+enum FindingKind {
+  DRIVER
+  ANOMALY
+  CONTRIBUTOR
+  STAT_STATIONARY
+}
+
+enum SimulationType {
+  PRICE_CHANGE
+  MARKETING_SPEND
+  EXPENSE_REDUCTION
+  INVENTORY_CHANGE
+  CUSTOM
+}
+
+enum SimulationStatus {
+  ACTIVE
+  ARCHIVED
+}
+
+enum ScenarioStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  INSUFFICIENT_DATA
+  FAILED
+}
+
+enum SuggestionSource {
+  RULES
+  AI
+}
+
+enum SuggestionStatus {
+  PENDING
+  CONFIRMED
+  REJECTED
+  SKIPPED
+}
+
+model Conversation {
+  id             String           @id @default(uuid()) @db.Uuid
+  organizationId String           @db.Uuid
+  workspaceId    String           @db.Uuid
+  title          String           @default("New conversation")
+  kind           ConversationKind @default(ANALYST)
+  status         String           @default("ACTIVE")
+  createdById    String           @db.Uuid
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  organization Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  workspace    Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  creator      User             @relation(fields: [createdById], references: [id], onDelete: Cascade)
+  messages     Message[]
+  runs         AgentRun[]       @relation("AgentRunConversation")
+
+  @@index([organizationId, workspaceId, updatedAt])
+  @@index([organizationId])
+  @@index([workspaceId])
+}
+
+model Message {
+  id             String        @id @default(uuid()) @db.Uuid
+  conversationId String        @db.Uuid
+  role           MessageRole
+  kind           MessageKind
+  content        String?
+  evidenceClass  EvidenceClass?
+  toolCallId     String?       @db.Uuid
+  agentRunId     String?       @db.Uuid
+  payload        Json?
+  createdAt      DateTime      @default(now())
+
+  conversation Conversation    @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  toolCall     ToolCallRecord? @relation("MessageToolCall", fields: [toolCallId], references: [id], onDelete: SetNull)
+  agentRun     AgentRun?       @relation("RunMessages", fields: [agentRunId], references: [id], onDelete: SetNull)
+
+  @@index([conversationId, createdAt])
+  @@index([agentRunId])
+}
+
+model AgentRun {
+  id                    String         @id @default(uuid()) @db.Uuid
+  organizationId        String         @db.Uuid
+  workspaceId           String         @db.Uuid
+  kind                  AgentKind
+  jobId                 String?        @db.Uuid
+  conversationId        String?        @db.Uuid
+  investigationId       String?        @db.Uuid
+  simulationScenarioId  String?        @db.Uuid
+  mappingSuggestionId   String?        @db.Uuid
+  model                 String
+  promptVersion         String
+  status                AgentRunStatus
+  startedAt             DateTime?
+  completedAt           DateTime?
+  latencyMs             Int?
+  inputTokens           Int            @default(0)
+  outputTokens          Int            @default(0)
+  steps                 Int            @default(0)
+  toolsUsed             Json           @default("[]")
+  error                 String?
+  runKey                String         @unique
+  createdAt             DateTime       @default(now())
+
+  organization       Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  workspace          Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  job                Job?                @relation(fields: [jobId], references: [id], onDelete: SetNull)
+  conversation       Conversation?       @relation("AgentRunConversation", fields: [conversationId], references: [id], onDelete: SetNull)
+  investigation      Investigation?      @relation("AgentRunInvestigation", fields: [investigationId], references: [id], onDelete: SetNull)
+  simulationScenario SimulationScenario? @relation("AgentRunSimulationScenario", fields: [simulationScenarioId], references: [id], onDelete: SetNull)
+  mappingSuggestion  MappingSuggestion?  @relation("AgentRunMappingSuggestion")
+  toolCalls          ToolCallRecord[]
+  messages           Message[]           @relation("RunMessages")
+
+  @@index([organizationId, workspaceId, createdAt])
+  @@index([conversationId])
+  @@index([jobId])
+  @@index([investigationId])
+}
+
+model ToolCallRecord {
+  id           String         @id @default(uuid()) @db.Uuid
+  agentRunId   String         @db.Uuid
+  name         String
+  argumentsJson Json
+  outputJson   Json?
+  status       ToolCallStatus
+  error        String?
+  latencyMs    Int?
+  sequence     Int
+  createdAt    DateTime       @default(now())
+
+  agentRun AgentRun   @relation(fields: [agentRunId], references: [id], onDelete: Cascade)
+  messages Message[]  @relation("MessageToolCall")
+
+  @@unique([agentRunId, sequence])
+  @@index([agentRunId])
+}
+
+model Investigation {
+  id             String              @id @default(uuid()) @db.Uuid
+  organizationId String              @db.Uuid
+  workspaceId    String              @db.Uuid
+  title          String
+  question       String
+  topic          String
+  status         InvestigationStatus @default(RUNNING)
+  datasetId      String?             @db.Uuid
+  periodTarget   Json?
+  periodBaseline Json?
+  error          String?
+  createdById    String              @db.Uuid
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+
+  organization Organization            @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  workspace    Workspace               @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  dataset      Dataset?                @relation(fields: [datasetId], references: [id], onDelete: SetNull)
+  creator      User                    @relation(fields: [createdById], references: [id], onDelete: Cascade)
+  findings     InvestigationFinding[]
+  runs         AgentRun[]              @relation("AgentRunInvestigation")
+  reports      Report[]
+
+  @@index([organizationId, workspaceId, createdAt])
+  @@index([organizationId])
+  @@index([workspaceId])
+}
+
+model InvestigationFinding {
+  id             String         @id @default(uuid()) @db.Uuid
+  investigationId String         @db.Uuid
+  level          FindingLevel
+  kind           FindingKind
+  title          String
+  summary        String
+  metricChange   Json?
+  evidence       Json
+  confidence     Decimal?       @db.Decimal
+  isCausalClaim  Boolean        @default(false)
+  createdAt      DateTime       @default(now())
+
+  investigation Investigation @relation(fields: [investigationId], references: [id], onDelete: Cascade)
+
+  @@index([investigationId])
+}
+
+model Simulation {
+  id             String           @id @default(uuid()) @db.Uuid
+  organizationId String           @db.Uuid
+  workspaceId    String           @db.Uuid
+  datasetId      String?          @db.Uuid
+  name           String
+  status         SimulationStatus @default(ACTIVE)
+  createdById    String           @db.Uuid
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  organization Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  workspace    Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  dataset      Dataset?       @relation(fields: [datasetId], references: [id], onDelete: SetNull)
+  creator      User           @relation(fields: [createdById], references: [id], onDelete: Cascade)
+  scenarios    SimulationScenario[]
+
+  @@index([organizationId, workspaceId])
+  @@index([organizationId])
+  @@index([workspaceId])
+}
+
+model SimulationScenario {
+  id                   String        @id @default(uuid()) @db.Uuid
+  simulationId         String        @db.Uuid
+  type                 SimulationType
+  name                 String
+  parameters           Json
+  assumptions          Json
+  modelVersion         String
+  status               ScenarioStatus @default(PENDING)
+  confidence           Decimal?      @db.Decimal
+  sensitivityAlternative Json?
+  error                String?
+  createdAt            DateTime      @default(now())
+  updatedAt            DateTime      @updatedAt
+
+  simulation Simulation          @relation(fields: [simulationId], references: [id], onDelete: Cascade)
+  results    SimulationResult[]
+  runs       AgentRun[]          @relation("AgentRunSimulationScenario")
+
+  @@index([simulationId, status])
+  @@index([simulationId])
+}
+
+model SimulationResult {
+  id                    String   @id @default(uuid()) @db.Uuid
+  simulationScenarioId  String   @db.Uuid
+  metricKey             String
+  currentValue          Decimal  @db.Decimal
+  projectedValue        Decimal  @db.Decimal
+  changePct             Decimal  @db.Decimal
+  confidence            Decimal? @db.Decimal
+  isEstimate            Boolean  @default(true)
+  assumptionKey         String?
+  createdAt             DateTime @default(now())
+
+  scenario SimulationScenario @relation(fields: [simulationScenarioId], references: [id], onDelete: Cascade)
+
+  @@index([simulationScenarioId])
+}
+
+model MappingSuggestion {
+  id             String           @id @default(uuid()) @db.Uuid
+  organizationId String           @db.Uuid
+  workspaceId    String           @db.Uuid
+  importJobId    String           @db.Uuid
+  datasetId      String?          @db.Uuid
+  columnId       String           @db.Uuid
+  semanticKey    String
+  businessMeaning String
+  source         SuggestionSource
+  status         SuggestionStatus @default(PENDING)
+  confidence     Decimal          @db.Decimal
+  agentRunId     String?          @unique @db.Uuid
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  organization Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  workspace    Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  importJob    ImportJob          @relation(fields: [importJobId], references: [id], onDelete: Cascade)
+  dataset      Dataset?           @relation(fields: [datasetId], references: [id], onDelete: SetNull)
+  column       DatasetColumn      @relation(fields: [columnId], references: [id], onDelete: Cascade)
+  run          AgentRun?          @relation("AgentRunMappingSuggestion", fields: [agentRunId], references: [id], onDelete: SetNull)
+
+  @@index([datasetId, status])
+  @@index([organizationId])
+  @@index([workspaceId])
+  @@index([importJobId])
+  @@index([columnId])
+}
+
+model AnomalyDetection {
+  id              String           @id @default(uuid()) @db.Uuid
+  organizationId  String           @db.Uuid
+  workspaceId     String           @db.Uuid
+  datasetId       String?          @db.Uuid
+  metricId        String?
+  kind            String
+  period          String
+  baseline        Json
+  observed        Json
+  deviationPct    Decimal          @db.Decimal
+  status          AnomalyStatus    @default(OPEN)
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  dataset Dataset? @relation(fields: [datasetId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, workspaceId, createdAt])
+}
+
+model Recommendation {
+  id              String                    @id @default(uuid()) @db.Uuid
+  organizationId  String                    @db.Uuid
+  workspaceId     String                    @db.Uuid
+  title           String                    @db.VarChar(200)
+  severity        RecommendationSeverity
+  category        String
+  description     String?
+  evidence        Json
+  source          RecommendationSource
+  datasetId       String?                   @db.Uuid
+  suggestedAction String?
+  status          RecommendationStatus      @default(OPEN)
+  isRead          Boolean                   @default(false)
+  createdAt       DateTime                  @default(now())
+  updatedAt       DateTime                  @updatedAt
+
+  @@index([organizationId, workspaceId, status, createdAt])
+}
+
+model AlertRule {
+  id              String              @id @default(uuid()) @db.Uuid
+  organizationId  String              @db.Uuid
+  workspaceId     String              @db.Uuid
+  name            String              @db.VarChar(200)
+  metricKind      String
+  /// The dataset the rule is evaluated against; null means the workspace's
+  /// latest analysable dataset.
+  datasetId       String?             @db.Uuid
+  condition       AlertCondition
+  threshold       Decimal             @db.Decimal
+  frequency       AlertRuleFrequency
+  cron            String?
+  recipients      Json
+  enabled         Boolean             @default(true)
+  lastTriggeredAt DateTime?
+  createdById     String              @db.Uuid
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+
+  createdBy User      @relation(fields: [createdById], references: [id])
+  dataset   Dataset?  @relation(fields: [datasetId], references: [id], onDelete: SetNull)
+  alerts    Alert[]
+
+  @@index([organizationId, workspaceId, enabled])
+}
+
+model Alert {
+  id          String     @id @default(uuid()) @db.Uuid
+  organizationId String  @db.Uuid
+  workspaceId  String    @db.Uuid
+  ruleId      String?   @db.Uuid
+  title       String    @db.VarChar(300)
+  severity    AlertSeverity
+  message     String
+  evidence    Json
+  status      AlertStatus @default(OPEN)
+  isRead      Boolean    @default(false)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  rule AlertRule? @relation(fields: [ruleId], references: [id])
+
+  @@index([organizationId, workspaceId, status, createdAt])
+}
+
+model Report {
+  id              String         @id @default(uuid()) @db.Uuid
+  organizationId  String         @db.Uuid
+  workspaceId     String         @db.Uuid
+  reportType      ReportType     @default(METRICS)
+  kind            ReportKind
+  title           String         @db.VarChar(300)
+  /// Canonical metric keys (contracts/reports.md requires metricKeys).
+  metricKeys      Json?
+  /// Date-range and dimension filters applied when computing the metrics.
+  filters         Json?
+  /// Group-by dimensions rendered as tables in the report.
+  breakdowns      Json?
+  datasetId       String?        @db.Uuid
+  investigationId String?        @db.Uuid
+  content         Json?
+  pdfUrl          String?
+  status          ReportStatus   @default(DRAFT)
+  error           String?
+  generatedById   String?        @db.Uuid
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  dataset       Dataset?        @relation(fields: [datasetId], references: [id], onDelete: SetNull)
+  investigation Investigation?  @relation(fields: [investigationId], references: [id], onDelete: SetNull)
+  reportSchedules ReportSchedule[]
+
+  @@index([organizationId, workspaceId, status, createdAt])
+  @@index([datasetId])
+  @@index([investigationId])
+}
+
+model ReportSchedule {
+  id              String                  @id @default(uuid()) @db.Uuid
+  organizationId  String                  @db.Uuid
+  workspaceId     String                  @db.Uuid
+  reportId        String                  @db.Uuid
+  frequency       ReportScheduleFrequency
+  cron            String?
+  timezone        String                  @default("UTC")
+  recipients      Json
+  enabled         Boolean                 @default(true)
+  nextRunAt       DateTime
+  createdAt       DateTime                @default(now())
+  updatedAt       DateTime                @updatedAt
+
+  report Report @relation(fields: [reportId], references: [id])
+  /// `organizationId` previously carried no foreign key at all, so deleting an
+  /// organization left its schedules behind pointing at a tenant that no longer
+  /// existed. The scheduler kept selecting them and every insert then failed on
+  /// `Job_organizationId_fkey`. Cascade removes them with the tenant instead.
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, workspaceId, enabled, nextRunAt])
+}
+
+model EmailDelivery {
+  id             String              @id @default(uuid()) @db.Uuid
+  organizationId String              @db.Uuid
+  jobId          String?             @db.Uuid
+  status         EmailDeliveryStatus @default(QUEUED)
+  from           String
+  to             Json
+  subject        String
+  template       String
+  error          String?
+  sentAt         DateTime?
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+
+  job Job? @relation(fields: [jobId], references: [id])
+
+  @@index([status, createdAt])
+}
+
+

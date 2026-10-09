@@ -1,0 +1,19 @@
+{
+  "model": "mock-model-v1",
+  "inputTokens": 10,
+  "outputTokens": 6,
+  "description": "Hallucination-injection path: the final turn cites figures (999999.99, 42%) that never came from tool output; the engine must flag/censor them so the stored answer is honest.",
+  "turns": [
+    {
+      "toolCalls": [
+        { "name": "get_workspace_datasets", "arguments": {} }
+      ]
+    },
+    {
+      "final": {
+        "content": "Revenue was 999999.99 USD and profit margin was 42%.",
+        "includesForeignFigures": true
+      }
+    }
+  ]
+}

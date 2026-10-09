@@ -1,0 +1,19 @@
+{
+  "model": "mock-model-v1",
+  "inputTokens": 9,
+  "outputTokens": 6,
+  "description": "Honest-failure path: the metric is unavailable, so the final answer must say so instead of inventing a figure.",
+  "turns": [
+    {
+      "toolCalls": [
+        { "name": "calculate_metric", "arguments": { "metricKey": "profit_margin" } }
+      ]
+    },
+    {
+      "final": {
+        "content": "I cannot compute profit margin because the available columns do not contain a cost line. I did not estimate it.",
+        "includesForeignFigures": false
+      }
+    }
+  ]
+}

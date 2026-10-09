@@ -1,0 +1,37 @@
+{
+  "model": "mock-model-v1",
+  "inputTokens": 30,
+  "outputTokens": 20,
+  "description": "Budget path: the model exceeds the tool-call cap; the engine must stop with BUDGET_EXCEEDED instead of looping forever.",
+  "turns": [
+    {
+      "toolCalls": [
+        { "name": "get_workspace_datasets", "arguments": {} },
+        { "name": "calculate_metric", "arguments": { "metricKey": "revenue" } }
+      ]
+    },
+    {
+      "toolCalls": [
+        { "name": "calculate_metric", "arguments": { "metricKey": "orders" } },
+        { "name": "group_by_dimension", "arguments": { "metricKey": "orders" } }
+      ]
+    },
+    {
+      "toolCalls": [
+        { "name": "find_anomalies", "arguments": { "metricKey": "orders" } },
+        { "name": "compare_periods", "arguments": { "metricKey": "orders" } }
+      ]
+    },
+    {
+      "toolCalls": [
+        { "name": "calculate_metric", "arguments": { "metricKey": "expenses" } },
+        { "name": "group_by_dimension", "arguments": { "metricKey": "expenses" } }
+      ]
+    },
+    {
+      "toolCalls": [
+        { "name": "get_dataset_sample", "arguments": { "datasetId": "ds_1" } }
+      ]
+    }
+  ]
+}

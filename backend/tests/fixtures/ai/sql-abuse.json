@@ -1,0 +1,20 @@
+{
+  "model": "mock-model-v1",
+  "inputTokens": 14,
+  "outputTokens": 8,
+  "description": "SQL-abuse path: the model asks for SELECT * (unsupported, too heavy) and a write statement; the tool must reject both on safety grounds.",
+  "turns": [
+    {
+      "toolCalls": [
+        { "name": "run_readonly_sql", "arguments": { "datasetId": "ds_1", "statement": "SELECT * FROM dataset" } },
+        { "name": "run_readonly_sql", "arguments": { "datasetId": "ds_1", "statement": "DELETE FROM dataset WHERE 1=1" } }
+      ]
+    },
+    {
+      "final": {
+        "content": "Both requests were rejected: the tool only accepts safe aggregate queries over mapped columns and never writes.",
+        "includesForeignFigures": false
+      }
+    }
+  ]
+}

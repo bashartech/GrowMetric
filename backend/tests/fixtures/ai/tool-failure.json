@@ -1,0 +1,20 @@
+{
+  "model": "mock-model-v1",
+  "inputTokens": 11,
+  "outputTokens": 5,
+  "description": "Tool failure path: run_readonly_sql throws; the engine surfaces the error to the model and the model finishes honestly without hallucinating results.",
+  "turns": [
+    {
+      "toolCalls": [
+        { "name": "get_dataset_schema", "arguments": { "datasetId": "ds_1" } },
+        { "name": "run_readonly_sql", "arguments": { "datasetId": "ds_1", "statement": "SELECT bad syntax" } }
+      ]
+    },
+    {
+      "final": {
+        "content": "The query failed with a syntax error. I removed the unsupported column and tried again; if it still fails I will report the error rather than guess.",
+        "includesForeignFigures": false
+      }
+    }
+  ]
+}
