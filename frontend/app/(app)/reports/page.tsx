@@ -218,7 +218,7 @@ async function handleGenerate(id: string) {
               aria-label="Investigation"
               value={form.investigationId ?? ''}
               onChange={e => setForm(f => ({ ...f, investigationId: e.target.value || null }))}
-              className="w-full px-3 py-2 border rounded"
+              className="w-full bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring px-3 py-2 border rounded"
             >
               <option value="">Select an investigation…</option>
               {investigations.map(inv => (
@@ -231,7 +231,7 @@ async function handleGenerate(id: string) {
                 aria-label="Dataset"
                 value={form.datasetId ?? ''}
                 onChange={e => setForm(f => ({ ...f, datasetId: e.target.value || null }))}
-                className="w-full px-3 py-2 border rounded"
+                className="w-full px-3 py-2 border rounded bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
               >
                 <option value="">Select a dataset…</option>
                 {datasets.map(ds => (

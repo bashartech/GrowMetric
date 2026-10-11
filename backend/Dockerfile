@@ -40,4 +40,4 @@ EXPOSE 7860
 # Start the job worker and the API together in one container. `wait -n` keeps
 # the container alive until either process exits (matching orchestrator
 # restart behavior on crashes).
-CMD ["sh", "-c", "node dist/src/workers/runner.js & node dist/src/server.js & wait -n"]
+CMD ["bash", "-c", "node dist/src/workers/runner.js & node dist/src/server.js & wait -n"]

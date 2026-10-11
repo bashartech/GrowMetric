@@ -96,11 +96,11 @@ export default function ReportSchedulesPage() {
       </div>
       {showForm && reports.length > 0 && (
         <div className="border rounded-lg p-4 space-y-4">
-          <select value={form.reportId} onChange={e => setForm(f => ({...f, reportId: e.target.value}))} className="w-full px-3 py-2 border rounded">
+          <select value={form.reportId} onChange={e => setForm(f => ({...f, reportId: e.target.value}))} className="w-full px-3 py-2 border rounded bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring">
             <option value="">Select a report</option>
             {reports.map(r => <option key={r.id} value={r.id}>{r.title}</option>)}
           </select>
-          <select value={form.frequency} onChange={e => setForm(f => ({...f, frequency: e.target.value}))} className="px-3 py-2 border rounded">
+          <select value={form.frequency} onChange={e => setForm(f => ({...f, frequency: e.target.value}))} className="px-3 py-2 border rounded bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring">
             <option value="DAILY">Daily</option>
             <option value="WEEKLY">Weekly</option>
             <option value="MONTHLY">Monthly</option>

@@ -110,7 +110,7 @@ export default function AlertRulesPage() {
           <input value={form.name} onChange={e => setForm((f: CreateAlertRuleInput) => ({...f, name: e.target.value}))} placeholder="Rule name" className="w-full px-3 py-2 border rounded" />
           <input value={form.metricKind} onChange={e => setForm((f: CreateAlertRuleInput) => ({...f, metricKind: e.target.value}))} placeholder="Metric kind (e.g., REVENUE, ORDERS)" className="w-full px-3 py-2 border rounded" />
           <input type="number" value={form.threshold} onChange={e => setForm((f: CreateAlertRuleInput) => ({...f, threshold: Number(e.target.value)}))} placeholder="Threshold" className="w-full px-3 py-2 border rounded" />
-          <select value={form.condition} onChange={e => setForm((f: CreateAlertRuleInput) => ({...f, condition: e.target.value}))} className="px-3 py-2 border rounded">
+          <select value={form.condition} onChange={e => setForm((f: CreateAlertRuleInput) => ({...f, condition: e.target.value}))} className="px-3 py-2 border rounded bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring">
             <option value="GREATER_THAN">Greater Than</option>
             <option value="LESS_THAN">Less Than</option>
             <option value="EQUAL_TO">Equals</option>
